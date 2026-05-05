@@ -1,0 +1,13 @@
+name: mlops
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.14
+  - matplotlib
+  - numpy
+  - pandas
+  - scikit-learn
+  - ipykernel
+  - seaborn
+prefix: /Users/mattfelici/miniconda3/envs/mlops
