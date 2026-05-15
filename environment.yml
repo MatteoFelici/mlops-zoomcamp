@@ -10,4 +10,6 @@ dependencies:
   - scikit-learn
   - ipykernel
   - seaborn
+  - setuptools==81.0.0
+  - xgboost
 prefix: /Users/mattfelici/miniconda3/envs/mlops
