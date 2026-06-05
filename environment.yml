@@ -4,12 +4,16 @@ channels:
   - conda-forge
 dependencies:
   - python=3.14
+  - fastparquet
+  - ipykernel
   - matplotlib
   - numpy
   - pandas
   - scikit-learn
-  - ipykernel
   - seaborn
   - setuptools==81.0.0
   - xgboost
+  - conda-forge::ipywidgets
+  - conda-forge::mlflow
+  - conda-forge::optuna
 prefix: /Users/mattfelici/miniconda3/envs/mlops

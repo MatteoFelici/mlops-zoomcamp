@@ -1,6 +1,5 @@
 from datetime import datetime
 import pandas as pd
-import numpy as np
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import root_mean_squared_error
