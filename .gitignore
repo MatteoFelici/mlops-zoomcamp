@@ -226,3 +226,8 @@ mlruns/
 # bin/b files
 *.bin
 *.b
+
+# Other folders
+*tmp/
+models/
+artifacts/
