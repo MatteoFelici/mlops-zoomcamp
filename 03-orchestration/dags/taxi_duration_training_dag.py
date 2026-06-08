@@ -2,8 +2,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
 import pickle
-import tempfile
 import os
+import logging
 
 # Importa le tue funzioni
 from train import read_dataframe, preprocessing, hyperparam_optimization, train_best_model, save_model
@@ -14,15 +14,17 @@ default_args = {
     'owner': 'mattfelici',
     'retries': 1,
 }
+logger = logging.getLogger('airflow.task')
+
 
 with DAG(
     dag_id='nyt_taxi_duration_training',
     default_args=default_args,
     schedule=None,               # esecuzione manuale, o metti un cron
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     params={                     # parametri passabili al trigger
-        'year': '2024',
+        'year': '2026',
         'month': '01',
         'n_trials': 10,
         'num_boost_round': 100,
@@ -56,6 +58,11 @@ with DAG(
             pickle.dump(dv, f)
 
     def _hyperparam_optimization(**context):
+        import mlflow
+        
+        mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5001'))
+        mlflow.set_experiment('nyt-taxi-duration')
+        
         import xgboost as xgb
         p = context['params']
 
@@ -75,6 +82,11 @@ with DAG(
             pickle.dump(best_params, f)
 
     def _train_best_model(**context):
+        import mlflow
+        
+        mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5001'))
+        mlflow.set_experiment('nyt-taxi-duration')
+        
         import xgboost as xgb
         p = context['params']
 
@@ -93,14 +105,30 @@ with DAG(
             num_boost_round=p['num_boost_round']
         )
         booster.save_model(f'{TMP_DIR}/booster.json')
+        context['ti'].xcom_push(key='run_id', value=mlflow.last_active_run().info.run_id)
+
 
     def _save_model(**context):
+        import mlflow
         import xgboost as xgb
-        booster = xgb.Booster()
-        booster.load_model(f'{TMP_DIR}/booster.json')
-        with open(f'{TMP_DIR}/dv.pkl', 'rb') as f:
-            dv = pickle.load(f)
-        save_model(dv, booster)
+        
+        mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5001'))
+        mlflow.set_experiment('nyt-taxi-duration')
+        
+        run_id = context['ti'].xcom_pull(key='run_id', task_ids='train_best_model')
+        
+        with mlflow.start_run(run_id=run_id):  # riprende il run esistente
+            logger.info(f'MLFLOW_TRACKING_URI env: {os.getenv("MLFLOW_TRACKING_URI")}')
+            logger.info(f'MLflow tracking URI: {mlflow.get_tracking_uri()}')
+            logger.info(f'MLflow artifact URI: {mlflow.get_artifact_uri()}')
+            logger.info(f'Resuming run_id: {run_id}')
+
+            booster = xgb.Booster()
+            booster.load_model(f'{TMP_DIR}/booster.json')
+            with open(f'{TMP_DIR}/dv.pkl', 'rb') as f:
+                dv = pickle.load(f)
+
+            save_model(dv, booster)
 
     # --- definizione dei task ---
 

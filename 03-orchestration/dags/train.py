@@ -7,18 +7,22 @@ import pickle
 import xgboost as xgb
 import optuna
 import mlflow
+import logging
+import gc
+
+logger = logging.getLogger(__name__)
 
 
 def read_dataframe(year: str,
                    month: str) -> pd.DataFrame:
 
     data_url = f'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{year}-{month}.parquet'
-    print(f'Reading dataframe from {data_url}')
+    logger.info(f'Reading dataframe from {data_url}')
     df = pd.read_parquet(
         data_url,
         engine='fastparquet'
     )
-    print(f'{df.shape[0]} records loaded')
+    logger.info(f'{df.shape[0]} records loaded')
 
     # Duration
     df['duration'] = (df['tpep_dropoff_datetime'] -
@@ -43,7 +47,7 @@ def preprocessing(
     tgt: str = 'duration'
 ) -> tuple[xgb.DMatrix, xgb.DMatrix, pd.Series, pd.Series, DictVectorizer]:
 
-    print('Start preprocessing')
+    logger.info('Start preprocessing')
     dv = DictVectorizer(separator='_')
     tmp = df[categorical + numerical]
     tmp[categorical] = tmp[categorical].astype(str)
@@ -71,7 +75,7 @@ def hyperparam_optimization(
     num_boost_round
 ) -> dict:
     
-    print('Start optimization')
+    logger.info('Start optimization')
 
     def optimize(trial):
 
@@ -81,11 +85,11 @@ def hyperparam_optimization(
             mlflow.set_tag('model-optimization', 'hyperopt')
 
             params = {
-                'max_depth': trial.suggest_int('max_depth', 4, 25),
+                'max_depth': trial.suggest_int('max_depth', 4, 8),
                 'learning_rate': trial.suggest_float('learning_rate', 1e-2, 1e0, log=True),
                 'reg_alpha': trial.suggest_float('reg_alpha', 1e-5, 1e-1, log=True),
                 'reg_lambda': trial.suggest_float('reg_lambda', 1e-6, 1e-1, log=True),
-                'min_child_weight': trial.suggest_float('min_child_weight', 1e-1, 1e3, log=True),
+                'min_child_weight': trial.suggest_float('min_child_weight', 1e-1, 1e2, log=True),
                 'objective': 'reg:squarederror',
                 'seed': 42
             }
@@ -108,6 +112,9 @@ def hyperparam_optimization(
             mlflow.log_metric('RMSE_val', rmse_val)
 
             trial.set_user_attr("run_id", child_run.info.run_id)
+            
+            del booster
+            gc.collect()
 
             return rmse_val
 
@@ -117,13 +124,13 @@ def hyperparam_optimization(
         mlflow.log_param('N trials', n_trials)
 
         study = optuna.create_study(direction="minimize")
-        study.optimize(optimize, n_trials=n_trials)
+        study.optimize(optimize, n_trials=n_trials, n_jobs=1)
 
         # Log the best trial and its run ID
         mlflow.log_params(study.best_trial.params)
 
-    print('Best parameters found:')
-    print(study.best_trial.params)
+    logger.info('Best parameters found:')
+    logger.info(study.best_trial.params)
     return study.best_trial.params
 
 
@@ -137,7 +144,7 @@ def train_best_model(
     num_boost_round: int
 ) -> xgb.Booster :
 
-    print('Applying best parameters to train the main model')
+    logger.info('Applying best parameters to train the main model')
     
     with mlflow.start_run(run_name=run_name) as run:
 
@@ -162,7 +169,7 @@ def train_best_model(
 def save_model(dv: DictVectorizer,
                booster: xgb.Booster) -> None:
 
-    print('Save artifacts')
+    logger.info('Save artifacts')
     
     with open('dict_vectorizer_fit.b', 'wb') as f_out:
         pickle.dump(dv, f_out)
