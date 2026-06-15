@@ -1,4 +1,5 @@
-import predict
+# import predict
+import requests
 
 ride = {
     'PULocationID': '142',
@@ -7,6 +8,10 @@ ride = {
     'trip_distance': 5.42
 }
 
-features = predict.prepare_features(ride)
-preds = predict.predict(features)
-print(preds)
+# features = predict.prepare_features(ride)
+# preds = predict.predict(features)
+# print(preds)
+
+url = 'http://localhost:9696/predict'
+response = requests.post(url, json=ride)
+print(response.json())
